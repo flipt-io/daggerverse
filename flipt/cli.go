@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/blang/semver/v4"
 )
 
 type CLI struct {
-	Ctr  *Container
-	addr string
+	version string
+	addr    string
+	Ctr     *Container
 }
 
 // CLI returns a new Flipt CLI instance
@@ -17,15 +21,25 @@ func (f *Flipt) CLI(
 	//
 	// +optional
 	svc *Service) (*CLI, error) {
-	cli := &CLI{Ctr: f.Server()}
+	cli := &CLI{version: f.Version, Ctr: f.Server()}
 
 	return cli, nil
 }
 
 // Validate runs the Flipt validation command on the given directory
 func (c *CLI) Validate(ctx context.Context, dir *Directory) (*Container, error) {
-	// TODO: this doesn't work until we can run validate against a directory, as we get permission denied errors because it tries to scan the entire filesystem
-	return c.Ctr.WithMountedDirectory("/tmp", dir).WithExec([]string{"./flipt", "validate"}).Sync(ctx)
+	if c.version != "" && c.version != "latest" {
+		v, err := semver.Make(c.version)
+		if err != nil {
+			return nil, err
+		}
+
+		if v.LT(semver.MustParse("1.40.0")) {
+			return nil, errors.New("validate is only supported in Flipt 1.40.0 and above")
+		}
+	}
+
+	return c.Ctr.WithMountedDirectory("/tmp", dir).WithExec([]string{"./flipt", "validate", "-d", "/tmp"}).Sync(ctx)
 }
 
 // Import runs the Flipt import command on the given file
